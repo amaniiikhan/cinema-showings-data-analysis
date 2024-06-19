@@ -1,47 +1,62 @@
 import time
 from selenium import webdriver
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
 
-def select_dropdown_option_by_index(select_element, index):
-    options = select_element.find_elements(By.TAG_NAME, 'option')
-    if index < len(options):
-        options[index].click()
-    else:
-        raise ValueError(f"Index '{index}' is out of bounds for dropdown options")
+def select_dropdown_option_by_text(dropdown, text):
+    """Select an option from a dropdown by its visible text."""
+    options = dropdown.options
+    for option in options:
+        if option.text.strip() == text:
+            dropdown.select_by_visible_text(text)
+            return
+    raise ValueError(f"Option with text '{text}' not found in dropdown")
+
+def select_default_date(date_dropdown):
+    """Select the default date from the dropdown (the first option)."""
+    default_date = date_dropdown.options[0].text.strip()  # Index 0 is the default date
+    date_dropdown.select_by_index(0)
+    return default_date
 
 def scrape_nueplex(driver):
-    site_ids = ['1', '2']
-    site_names = {'1': 'DHA', '2': 'Askari IV'}
-
+    driver.get('https://nueplex.com/')
+    time.sleep(5)
+    wait = WebDriverWait(driver, 20)
+    site_dropdown = Select(wait.until(EC.presence_of_element_located((By.ID, 'branch'))))
+    site_ids = [option.get_attribute('value') for option in site_dropdown.options if option.get_attribute('value') != 'All']
     for site_id in site_ids:
-        driver.get("https://nueplex.com/")
-        wait = WebDriverWait(driver, 10)
-
-        site_dropdown = Select(wait.until(EC.presence_of_element_located((By.ID, 'branch'))))
-        select_dropdown_option_by_index(site_dropdown, int(site_id))
-        
-        movie_dropdown = Select(wait.until(EC.presence_of_element_located((By.ID, 'dateShowMovie'))))
-        select_dropdown_option_by_index(movie_dropdown, 1)
-        
-        date_dropdown = Select(wait.until(EC.presence_of_element_located((By.ID, 'dateShowTime'))))
-        select_dropdown_option_by_index(date_dropdown, 0)
-
+        print(f"Selecting site with ID: {site_id}")
+        select_dropdown_option_by_text(site_dropdown, site_dropdown.options[int(site_id)].text)
         time.sleep(3)
-        
-        showtimes = driver.find_elements(By.CLASS_NAME, 'movie-shedule')
-        for showtime in showtimes:
-            title = showtime.find_element(By.TAG_NAME, 'h4').text.strip()
-            times = showtime.find_elements(By.CLASS_NAME, 'time')
-            for time_element in times:
-                time_text = time_element.text.strip()
-                date_text = showtime.find_element(By.CLASS_NAME, 'session-date').text.strip()
-                print(f"Nueplex data: {site_names[site_id]}, Date: {date_text}, Time: {time_text}")
+        site_dropdown = Select(wait.until(EC.presence_of_element_located((By.ID, 'branch'))))
+        cinema_dropdown = Select(wait.until(EC.presence_of_element_located((By.ID, 'dateShowCinema'))))
+        movie_dropdown = Select(wait.until(EC.presence_of_element_located((By.ID, 'dateShowMovie'))))
+        date_dropdown = Select(wait.until(EC.presence_of_element_located((By.ID, 'dateShowTime'))))
+        select_dropdown_option_by_text(cinema_dropdown, "ALL CINEMAS")
+        time.sleep(1)
+        movie_dropdown = Select(wait.until(EC.presence_of_element_located((By.ID, 'dateShowMovie'))))
+        select_dropdown_option_by_text(movie_dropdown, "NA BALIGH AFRAAD (PAKISTANI)")
+        time.sleep(1)
+        date_dropdown = Select(wait.until(EC.presence_of_element_located((By.ID, 'dateShowTime'))))
+        default_date = select_default_date(date_dropdown)
+        print(f"Selecting date: {default_date}")
+        time.sleep(1)
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        showings = soup.find_all('div', class_='movie-shedule')
+        for showing in showings:
+            title_element = showing.find('h4', class_='eq-height')
+            time_element = showing.find('span', class_='time')
+            if title_element and time_element:
+                title_text = title_element.get_text(strip=True)
+                time_text = time_element.get_text(strip=True)
+                print(f"Site ID: {site_id}, Cinema: ALL CINEMAS, Title: {title_text}, Time: {time_text}, Date: {default_date}")
 
 def scrape_cinepax(driver):
-    cinepax_urls = [
+    driver.get('https://cinepax.com/')
+    time.sleep(5)
+    cinema_links = [
         ("AMANAH MALL LAHORE", "https://cinepax.com/Browsing/Cinemas/Details/0000000012"),
         ("BOULEVARD MALL HYDERABAD", "https://cinepax.com/Browsing/Cinemas/Details/0000000010"),
         ("HOTELONE FAISALABAD", "https://cinepax.com/Browsing/Cinemas/Details/0000000004"),
@@ -55,48 +70,30 @@ def scrape_cinepax(driver):
         ("WORLD TRADE CENTER ISLAMABAD", "https://cinepax.com/Browsing/Cinemas/Details/0000000011")
     ]
 
-    for cinema_name, url in cinepax_urls:
-        print(f"Scraping {cinema_name} ({url})")
-        driver.get(url)
-        time.sleep(5)  # Wait for the page to load completely
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
-        showtimes_divs = soup.find_all('div', class_='session')
-        for div in showtimes_divs:
-            date = div.find('h4', class_='session-date').text.strip()
-            times = div.find_all('time')
-            for time_element in times:
-                time_text = time_element.text.strip()
-                print(f"Cinepax data: {cinema_name}, Date: {date}, Time: {time_text}")
-
-def scrape_mecinemas(driver):
-    cinema_urls = [
-        ("Karachi Atrium Cinemas", "https://www.mecinemas.com/movie_details.php?code=HO00001264")
-    ]
-
-    for cinema_name, cinema_url in cinema_urls:
+    for cinema_name, cinema_url in cinema_links:
         print(f"Scraping {cinema_name} ({cinema_url})")
         driver.get(cinema_url)
-        time.sleep(5)  # Wait for the page to load completely
+        time.sleep(5)
         soup = BeautifulSoup(driver.page_source, 'html.parser')
-        showtimes_div = soup.find('div', class_='showtimes')
-        if showtimes_div:
-            header = showtimes_div.find('h4')
-            if header:
-                header_text = header.get_text(strip=True)
-                date_start = header_text.find("Showtimes") + len("Showtimes")
-                date_end = header_text.find(" at ")
-                show_date = header_text[date_start:date_end].strip()
-                times = showtimes_div.find_all('span', class_='available')
-                for time_span in times:
-                    time_text = time_span.get_text(strip=True)
-                    print(f"Mecinemas data: {cinema_name}, Date: {show_date}, Time: {time_text}")
+        showtimes_containers = soup.find_all('div', class_='film-showtimes')
+        for container in showtimes_containers:
+            film_title = container.find('h3', class_='film-title')
+            if film_title and 'Na Baligh Afraad' in film_title.text:
+                session_dates = container.find_all('h4', class_='session-date')
+                if session_dates:
+                    date_text = session_dates[0].get_text(strip=True)  # Only take the first date
+                    session_times = session_dates[0].find_next('div', class_='session-times')
+                    times = session_times.find_all('time')
+                    for time_elem in times:
+                        time_text = time_elem.get_text(strip=True)
+                        print(f"Cinepax data: {cinema_name}, Date: {date_text}, Time: {time_text}")
+                break  # Only scrape the first date, then move to the next cinema
 
 def main():
     driver = webdriver.Chrome()
     try:
         scrape_nueplex(driver)
         scrape_cinepax(driver)
-        scrape_mecinemas(driver)
     finally:
         driver.quit()
 
