@@ -26,7 +26,9 @@ def scrape_nueplex(driver):
     wait = WebDriverWait(driver, 20)
     site_dropdown = Select(wait.until(EC.presence_of_element_located((By.ID, 'branch'))))
     site_ids = [option.get_attribute('value') for option in site_dropdown.options if option.get_attribute('value') != 'All']
+    location_map = {'1': 'DHA', '2': 'Askari IV'}
     for site_id in site_ids:
+        location = location_map.get(site_id, 'Unknown Location')
         print(f"Selecting site with ID: {site_id}")
         select_dropdown_option_by_text(site_dropdown, site_dropdown.options[int(site_id)].text)
         time.sleep(3)
@@ -51,7 +53,7 @@ def scrape_nueplex(driver):
             if title_element and time_element:
                 title_text = title_element.get_text(strip=True)
                 time_text = time_element.get_text(strip=True)
-                print(f"Site ID: {site_id}, Cinema: ALL CINEMAS, Title: {title_text}, Time: {time_text}, Date: {default_date}")
+                print(f"Nueplex data: {location}, Date: {default_date}, Time: {time_text}")
 
 def scrape_cinepax(driver):
     driver.get('https://cinepax.com/')
