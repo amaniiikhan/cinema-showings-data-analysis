@@ -4,6 +4,7 @@ from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
+from datetime import datetime
 
 def select_dropdown_option_by_text(dropdown, text):
     """Select an option from a dropdown by its visible text."""
@@ -19,6 +20,15 @@ def select_default_date(date_dropdown):
     default_date = date_dropdown.options[0].text.strip()  # Index 0 is the default date
     date_dropdown.select_by_index(0)
     return default_date
+
+def convert_date_to_uniform_format(date_str):
+    """Convert date from 'Sunday, 23 June 2024' to '23-JUN-2024'."""
+    try:
+        date_obj = datetime.strptime(date_str, '%A, %d %B %Y')
+        return date_obj.strftime('%d-%b-%Y').upper()
+    except ValueError as e:
+        print(f"Error converting date: {e}")
+        return date_str
 
 def scrape_nueplex(driver):
     driver.get('https://nueplex.com/')
@@ -43,6 +53,7 @@ def scrape_nueplex(driver):
         time.sleep(1)
         date_dropdown = Select(wait.until(EC.presence_of_element_located((By.ID, 'dateShowTime'))))
         default_date = select_default_date(date_dropdown)
+        default_date = convert_date_to_uniform_format(default_date)
         print(f"Selecting date: {default_date}")
         time.sleep(1)
         soup = BeautifulSoup(driver.page_source, 'html.parser')
@@ -84,6 +95,7 @@ def scrape_cinepax(driver):
                 session_dates = container.find_all('h4', class_='session-date')
                 if session_dates:
                     date_text = session_dates[0].get_text(strip=True)  # Only take the first date
+                    date_text = convert_date_to_uniform_format(date_text)
                     session_times = session_dates[0].find_next('div', class_='session-times')
                     times = session_times.find_all('time')
                     for time_elem in times:
